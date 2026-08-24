@@ -18,5 +18,12 @@
     "express": "^5.2.1",
     "jsonwebtoken": "^9.0.3"
   },
-  "devDependencies": {}
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/druun787/meridian.git"
+  },
+  "bugs": {
+    "url": "https://github.com/druun787/meridian/issues"
+  },
+  "homepage": "https://github.com/druun787/meridian#readme"
 }

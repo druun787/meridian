@@ -18,6 +18,7 @@
 
 require('dotenv').config();
 
+const path = require('path');
 const express = require('express');
 const Database = require('better-sqlite3');
 const bcrypt = require('bcrypt');
@@ -26,7 +27,20 @@ const cors = require('cors');
 
 const app = express();
 app.use(cors());
-app.use(express.json());
+// Лимит увеличен с дефолтных 100kb — аватар, загруженный с устройства,
+// превращается в текстовую строку (base64) и может весить несколько
+// мегабайт, особенно если фото не сжато.
+app.use(express.json({ limit: '8mb' }));
+
+// Сервер теперь отдаёт сам сайт, а не только /api/... — значит,
+// сайт и сервер живут на одном и том же адресе. Это решает сразу
+// две вещи: больше не нужен Live Server или двойной клик по файлу
+// (открывать сайт теперь просто через http://localhost:3000),
+// и после публикации на хостинге ссылка будет ровно одна.
+app.use(express.static(__dirname));
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, 'meridian-prototype.html'));
+});
 
 const JWT_SECRET = 'учебный-секрет-поменяй-меня'; // в реальном проекте — из .env
 
@@ -71,6 +85,19 @@ db.exec(`
     added_date TEXT,
     FOREIGN KEY (user_id) REFERENCES users(id)
   );
+
+  -- Каждая строка здесь — один момент времени, когда была
+  -- поставлена (или изменена) оценка. entries.rating всегда
+  -- хранит ТЕКУЩУЮ, последнюю оценку — а эта таблица хранит
+  -- всю историю целиком, для таймлайна на странице фильма.
+  CREATE TABLE IF NOT EXISTS rating_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    tmdb_id INTEGER NOT NULL,
+    rating REAL NOT NULL,
+    rated_date TEXT NOT NULL,
+    FOREIGN KEY (user_id) REFERENCES users(id)
+  );
 `);
 
 // Миграции для базы, созданной ДО добавления этих колонок —
@@ -98,6 +125,21 @@ try {
   console.warn('Не удалось создать уникальный индекс — возможно, в базе уже есть дубликаты одного фильма у одного пользователя.');
   console.warn('Если увидишь эту надпись: проще всего остановить сервер, удалить файл meridian.db и запустить заново — это тестовые данные, их не жалко.');
 }
+
+// Разовая "подсадка" истории: если фильм был оценён ДО того, как
+// появилась эта таблица, у него ещё нет ни одной точки в rating_history.
+// Добавляем одну — на основе того, что уже есть в entries — чтобы
+// таймлайн не был пустым для старых записей.
+db.exec(`
+  INSERT INTO rating_history (user_id, tmdb_id, rating, rated_date)
+  SELECT e.user_id, e.tmdb_id, e.rating, COALESCE(e.watched_date, date('now'))
+  FROM entries e
+  WHERE e.status = 'watched' AND e.rating IS NOT NULL
+    AND NOT EXISTS (
+      SELECT 1 FROM rating_history h
+      WHERE h.user_id = e.user_id AND h.tmdb_id = e.tmdb_id
+    )
+`);
 
 // ---------------------------------------------------------
 // РЕГИСТРАЦИЯ
@@ -187,7 +229,62 @@ function requireAuth(req, res, next) {
 // Это называется "upsert" — insert, который в случае конфликта
 // превращается в update. Работает благодаря уникальному индексу
 // idx_entries_user_tmdb, который мы создали выше.
+//
+// Вынесено в отдельную функцию, потому что этим же способом
+// сохраняется и обычная отметка "посмотрел", и массовый импорт
+// из IMDB — незачем дублировать один и тот же SQL дважды.
 // ---------------------------------------------------------
+const upsertEntryStmt = db.prepare(`
+  INSERT INTO entries (user_id, tmdb_id, title, poster_path, rating, review, watched_date, release_year, genres, status)
+  VALUES (@user_id, @tmdb_id, @title, @poster_path, @rating, @review, @watched_date, @release_year, @genres, 'watched')
+  ON CONFLICT(user_id, tmdb_id) DO UPDATE SET
+    title = excluded.title,
+    poster_path = excluded.poster_path,
+    rating = excluded.rating,
+    review = excluded.review,
+    watched_date = excluded.watched_date,
+    release_year = excluded.release_year,
+    genres = excluded.genres,
+    status = 'watched'
+`);
+
+const historyInsertStmt = db.prepare(`
+  INSERT INTO rating_history (user_id, tmdb_id, rating, rated_date)
+  VALUES (?, ?, ?, ?)
+`);
+
+function upsertWatchedEntry(userId, data){
+  const genresText = Array.isArray(data.genres) ? data.genres.join(', ') : (data.genres || '');
+
+  // Смотрим, что было сохранено ДО этого изменения — если оценка
+  // реально другая (или записи ещё не было вовсе), добавляем новую
+  // точку в историю. Если оценка та же самая (например, просто
+  // пересохранили заметку) — историю не трогаем, лишняя точка не нужна.
+  const existing = db.prepare(
+    'SELECT rating FROM entries WHERE user_id = ? AND tmdb_id = ?'
+  ).get(userId, data.tmdb_id);
+
+  const newRating = data.rating ?? null;
+  const ratingChanged = newRating !== null && (!existing || Number(existing.rating) !== Number(newRating));
+
+  upsertEntryStmt.run({
+    user_id: userId,
+    tmdb_id: data.tmdb_id,
+    title: data.title,
+    poster_path: data.poster_path || '',
+    rating: newRating,
+    review: data.review || '',
+    watched_date: data.watched_date || null,
+    release_year: data.release_year ?? null,
+    genres: genresText
+  });
+
+  if(ratingChanged){
+    const ratedDate = data.watched_date || new Date().toISOString().slice(0, 10);
+    historyInsertStmt.run(userId, data.tmdb_id, newRating, ratedDate);
+  }
+}
+
 app.post('/api/entries', requireAuth, (req, res) => {
   const { tmdb_id, title, poster_path, rating, review, watched_date, release_year, genres } = req.body;
 
@@ -195,37 +292,8 @@ app.post('/api/entries', requireAuth, (req, res) => {
     return res.status(400).json({ error: 'Нужны хотя бы tmdb_id и title' });
   }
 
-  // genres приходит с фронтенда массивом (["Sci-Fi", "Drama"]) —
-  // в базе храним просто строкой через запятую, так проще фильтровать
-  const genresText = Array.isArray(genres) ? genres.join(', ') : (genres || '');
-
   try {
-    const stmt = db.prepare(`
-      INSERT INTO entries (user_id, tmdb_id, title, poster_path, rating, review, watched_date, release_year, genres, status)
-      VALUES (@user_id, @tmdb_id, @title, @poster_path, @rating, @review, @watched_date, @release_year, @genres, 'watched')
-      ON CONFLICT(user_id, tmdb_id) DO UPDATE SET
-        title = excluded.title,
-        poster_path = excluded.poster_path,
-        rating = excluded.rating,
-        review = excluded.review,
-        watched_date = excluded.watched_date,
-        release_year = excluded.release_year,
-        genres = excluded.genres,
-        status = 'watched'
-    `);
-
-    stmt.run({
-      user_id: req.userId,
-      tmdb_id,
-      title,
-      poster_path: poster_path || '',
-      rating: rating ?? null,
-      review: review || '',
-      watched_date: watched_date || null,
-      release_year: release_year ?? null,
-      genres: genresText
-    });
-
+    upsertWatchedEntry(req.userId, { tmdb_id, title, poster_path, rating, review, watched_date, release_year, genres });
     const saved = db.prepare('SELECT * FROM entries WHERE user_id = ? AND tmdb_id = ?').get(req.userId, tmdb_id);
     res.json(saved);
 
@@ -312,7 +380,20 @@ app.get('/api/profile/:username', (req, res) => {
     `SELECT * FROM entries WHERE user_id = ? ORDER BY COALESCE(watched_date, added_date) DESC`
   ).all(user.id);
 
-  res.json({ ...user, entries });
+  const historyRows = db.prepare(
+    `SELECT tmdb_id, rating, rated_date FROM rating_history WHERE user_id = ? ORDER BY rated_date ASC, id ASC`
+  ).all(user.id);
+
+  // Группируем плоский список строк истории в объект вида
+  // { [tmdb_id]: [{rating, rated_date}, ...] } — так фронтенду
+  // удобнее доставать историю конкретного фильма без лишней возни
+  const history = {};
+  for(const row of historyRows){
+    if(!history[row.tmdb_id]) history[row.tmdb_id] = [];
+    history[row.tmdb_id].push({ rating: row.rating, rated_date: row.rated_date });
+  }
+
+  res.json({ ...user, entries, history });
 });
 
 // ---------------------------------------------------------
@@ -333,9 +414,21 @@ app.put('/api/profile', requireAuth, (req, res) => {
 // TMDB-ПРОКСИ
 // Браузер обращается сюда вместо api.themoviedb.org напрямую.
 // Ключ добавляется здесь, на сервере — наружу он не уходит.
-// Эти три эндпоинта открытые (без requireAuth), потому что поиск
-// фильмов не требует входа в аккаунт — как и на самом TMDB.
+// Эти эндпоинты открытые (без requireAuth), потому что поиск
+// и просмотр каталога не требуют входа в аккаунт — как и на TMDB.
 // ---------------------------------------------------------
+app.get('/api/tmdb/popular', async (req, res) => {
+  try {
+    const url = `https://api.themoviedb.org/3/movie/popular?api_key=${TMDB_API_KEY}&language=ru-RU&page=1`;
+    const tmdbRes = await fetch(url);
+    const data = await tmdbRes.json();
+    res.status(tmdbRes.status).json(data);
+  } catch (err) {
+    console.error('Ошибка TMDB-прокси (popular):', err.message, '| причина:', err.cause);
+    res.status(502).json({ error: 'TMDB недоступен' });
+  }
+});
+
 app.get('/api/tmdb/search', async (req, res) => {
   const query = (req.query.query || '').trim();
   if (!query) return res.status(400).json({ error: 'Нужен параметр query' });
@@ -373,6 +466,64 @@ app.get('/api/tmdb/movie/:id/credits', async (req, res) => {
     console.error('Ошибка TMDB-прокси (credits):', err.message, '| причина:', err.cause);
     res.status(502).json({ error: 'TMDB недоступен' });
   }
+});
+
+// Находит фильм в TMDB по его IMDb ID (вида "tt1285016") — именно
+// такой идентификатор лежит в колонке "Const" при экспорте оценок
+// с IMDB. Это надёжнее, чем искать по названию текстом, потому что
+// у многих фильмов совпадают названия (ремейки, разные страны).
+app.get('/api/tmdb/find/:imdbId', async (req, res) => {
+  try {
+    const url = `https://api.themoviedb.org/3/find/${req.params.imdbId}?api_key=${TMDB_API_KEY}&external_source=imdb_id&language=ru-RU`;
+    const tmdbRes = await fetch(url);
+    const data = await tmdbRes.json();
+    res.status(tmdbRes.status).json(data);
+  } catch (err) {
+    console.error('Ошибка TMDB-прокси (find):', err.message, '| причина:', err.cause);
+    res.status(502).json({ error: 'TMDB недоступен' });
+  }
+});
+
+// Список жанров (id → название) — нужен, чтобы при импорте
+// превратить числовые genre_ids из ответа TMDB в читаемые названия
+app.get('/api/tmdb/genres', async (req, res) => {
+  try {
+    const url = `https://api.themoviedb.org/3/genre/movie/list?api_key=${TMDB_API_KEY}&language=ru-RU`;
+    const tmdbRes = await fetch(url);
+    const data = await tmdbRes.json();
+    res.status(tmdbRes.status).json(data);
+  } catch (err) {
+    console.error('Ошибка TMDB-прокси (genres):', err.message, '| причина:', err.cause);
+    res.status(502).json({ error: 'TMDB недоступен' });
+  }
+});
+
+// ---------------------------------------------------------
+// МАССОВЫЙ ИМПОРТ (например, из IMDB)
+// Браузер уже сопоставил каждую строку CSV с фильмом в TMDB —
+// сюда приходит готовый список записей, каждая сохраняется тем
+// же способом, что и обычная отметка "посмотрел".
+// ---------------------------------------------------------
+app.post('/api/import/entries', requireAuth, (req, res) => {
+  const { entries } = req.body;
+  if (!Array.isArray(entries)) {
+    return res.status(400).json({ error: 'Нужен массив entries' });
+  }
+
+  let imported = 0;
+  const errors = [];
+
+  for (const entry of entries) {
+    if (!entry.tmdb_id || !entry.title) continue;
+    try {
+      upsertWatchedEntry(req.userId, entry);
+      imported++;
+    } catch (err) {
+      errors.push(entry.title);
+    }
+  }
+
+  res.json({ imported, failed: errors.length, total: entries.length });
 });
 
 app.listen(3000, () => {

@@ -1,0 +1,1714 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>meridian — prototype</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #0a0a0d;
+    --surface: #131319;
+    --surface-2: #1a1a22;
+    --border: #232330;
+    --text: #e9e7e2;
+    --text-muted: #8890a0;
+    --text-dim: #565c6b;
+    --gold: #d9a441;
+    --purple: #a78bfa;
+    --green: #6ee7b7;
+    --rose: #e08a8a;
+  }
+  *{box-sizing:border-box; margin:0; padding:0;}
+  html,body{background:var(--bg); color:var(--text); font-family:'Inter',sans-serif; min-height:100vh;}
+  body{-webkit-font-smoothing:antialiased;}
+  a{color:inherit; text-decoration:none;}
+  .mono{font-family:'IBM Plex Mono',monospace;}
+  .serif{font-family:'Fraunces',serif;}
+
+  /* ---- header ---- */
+  header.top{
+    display:flex; align-items:center; justify-content:space-between;
+    padding:22px 48px; border-bottom:1px solid var(--border);
+    position:sticky; top:0; background:rgba(10,10,13,0.9); backdrop-filter:blur(10px); z-index:50;
+  }
+  .wordmark{font-family:'Fraunces',serif; font-weight:600; font-size:20px; letter-spacing:-0.02em; cursor:pointer;}
+  nav.top-nav{display:flex; gap:32px;}
+  nav.top-nav a{font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:0.08em; color:var(--text-dim); text-transform:uppercase;}
+  nav.top-nav a.active{color:var(--text);}
+
+  main{max-width:1180px; margin:0 auto; padding:48px;}
+
+  /* ---- library view ---- */
+  .lib-heading{margin-bottom:6px;}
+  .lib-heading h1{font-size:30px; font-weight:600;}
+  .lib-sub{color:var(--text-muted); font-size:14px; margin-bottom:32px;}
+
+  .grid{
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:22px;
+  }
+  .card{
+    cursor:pointer; border-radius:8px; overflow:hidden; background:var(--surface);
+    border:1px solid var(--border); transition:transform .18s ease, border-color .18s ease;
+  }
+  .card:hover{transform:translateY(-4px); border-color:#3a3a4a;}
+  .card .poster{aspect-ratio:2/3; width:100%; object-fit:cover; display:block; background:var(--surface-2);}
+  .card .info{padding:12px 14px 14px;}
+  .card .title{font-family:'Fraunces',serif; font-weight:600; font-size:15px; line-height:1.25; margin-bottom:4px;}
+  .card .director{font-size:12px; color:var(--text-muted);}
+  .card .meta-row{display:flex; justify-content:space-between; align-items:center; margin-top:8px;}
+  .card .year{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--text-dim);}
+  .stars{color:var(--gold); font-size:12px; letter-spacing:1px;}
+
+  /* ---- detail view ---- */
+  #detail{display:none;}
+  #detail.show{display:block;}
+  #library.hide{display:none;}
+
+  .back-link{
+    display:inline-flex; align-items:center; gap:6px; font-family:'IBM Plex Mono',monospace;
+    font-size:12px; color:var(--text-muted); margin-bottom:28px; cursor:pointer;
+  }
+  .back-link:hover{color:var(--text);}
+
+  .film-header{display:grid; grid-template-columns:260px 1fr; gap:44px; margin-bottom:48px;}
+  .film-header .poster-lg{width:100%; border-radius:10px; border:1px solid var(--border); box-shadow:0 30px 60px -20px rgba(0,0,0,0.6);}
+
+  .film-title{font-family:'Fraunces',serif; font-weight:700; font-size:42px; line-height:1.05; letter-spacing:-0.01em; margin-bottom:8px;}
+  .film-byline{color:var(--text-muted); font-size:15px; margin-bottom:18px;}
+  .film-byline .yr{color:var(--text-dim); font-family:'IBM Plex Mono',monospace; font-size:13px;}
+
+  .rating-row{display:flex; align-items:center; gap:18px; margin-bottom:22px;}
+  .stars-lg{color:var(--gold); font-size:20px; letter-spacing:2px;}
+  .rating-num{font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--text-muted);}
+
+  .tag-row{display:flex; flex-wrap:wrap; gap:8px; margin-bottom:24px;}
+  .tag{
+    font-family:'IBM Plex Mono',monospace; font-size:11px; padding:5px 10px; border-radius:5px;
+    background:var(--surface); border:1px solid var(--border); color:var(--text-muted);
+  }
+
+  .synopsis{color:#c4c8d2; font-size:15px; line-height:1.65; max-width:640px; margin-bottom:26px;}
+
+  .action-row{display:flex; gap:10px;}
+  .btn{
+    font-family:'IBM Plex Mono',monospace; font-size:12px; padding:10px 18px; border-radius:6px;
+    border:1px solid var(--border); cursor:pointer; letter-spacing:0.03em;
+  }
+  .btn.primary{background:var(--gold); color:#0a0a0d; border-color:var(--gold); font-weight:500;}
+  .btn.ghost{background:transparent; color:var(--text);}
+
+  /* your entry / diary card */
+  .section-label{
+    font-family:'IBM Plex Mono',monospace; font-size:11px; letter-spacing:0.12em; text-transform:uppercase;
+    color:var(--text-dim); margin-bottom:14px;
+  }
+  .entry-card{
+    background:var(--surface); border:1px solid var(--border); border-radius:10px; padding:24px;
+    margin-bottom:44px;
+  }
+  .entry-top{display:flex; justify-content:space-between; align-items:flex-start; margin-bottom:14px;}
+  .entry-top .stars-lg{font-size:16px;}
+  .entry-text{font-size:14px; line-height:1.6; color:#c4c8d2; margin-bottom:16px;}
+
+  /* viewing history timeline — расстояние между точками пропорционально
+     реальным промежуткам времени между сменами оценки, не одинаковое */
+  .tl-track{position:relative; height:66px; margin:20px 8px 8px;}
+  .tl-line{position:absolute; top:32px; left:0; right:0; height:2px; background:var(--border);}
+  .tl-rating{
+    position:absolute; top:0; transform:translateX(-50%);
+    font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--gold); white-space:nowrap;
+  }
+  .tl-circle{
+    position:absolute; top:27px; transform:translateX(-50%);
+    width:10px; height:10px; border-radius:50%; background:var(--gold); border:2px solid var(--bg);
+  }
+  .tl-date{
+    position:absolute; top:42px; transform:translateX(-50%);
+    font-size:10px; color:var(--text-dim); white-space:nowrap;
+  }
+
+  .cast-row{display:flex; gap:16px; overflow-x:auto; padding-bottom:8px; margin-bottom:44px;}
+  .cast-chip{flex-shrink:0; width:96px; text-align:center;}
+  .cast-chip .headshot{
+    width:96px; height:96px; border-radius:50%; background:var(--surface-2); border:1px solid var(--border);
+    display:flex; align-items:center; justify-content:center; font-family:'Fraunces',serif; font-size:22px; color:var(--text-dim);
+    margin-bottom:8px;
+  }
+  .cast-chip .cname{font-size:12px; font-weight:500;}
+  .cast-chip .crole{font-size:11px; color:var(--text-dim);}
+
+  .similar-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(130px,1fr)); gap:16px;}
+  .similar-grid .card .title{font-size:13px;}
+
+  /* ---- profile pill (top right) ---- */
+  .profile-pill{
+    display:flex; align-items:center; gap:8px; cursor:pointer;
+    font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--text-muted);
+  }
+  .profile-pill:hover{color:var(--text);}
+  .avatar-mini{
+    width:26px; height:26px; border-radius:50%; background:linear-gradient(160deg,#4a4a5a,#232330);
+    border:1px solid var(--border);
+  }
+
+  .avatar-upload-row{display:flex; align-items:center; gap:12px;}
+  .avatar-upload-preview{width:48px; height:48px; flex-shrink:0; background-size:cover; background-position:center;}
+  .avatar-upload-btn{
+    font-family:'IBM Plex Mono',monospace; font-size:11px; padding:9px 14px; cursor:pointer;
+  }
+
+  .import-block{margin-bottom:24px;}
+  .import-btn{
+    font-family:'IBM Plex Mono',monospace; font-size:12px; padding:10px 16px; cursor:pointer; display:inline-block;
+  }
+  .import-status{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--text-dim); margin-top:8px;}
+  .import-status.ok{color:var(--green);}
+  .import-status.err{color:var(--rose);}
+
+  /* ---- profile page ---- */
+  #profile{display:none;}
+  #profile.show{display:block;}
+
+  .profile-header{display:grid; grid-template-columns:150px 1fr auto; gap:36px; align-items:start; margin-bottom:36px;}
+  .avatar-lg{
+    width:150px; height:150px; border-radius:50%; background:linear-gradient(160deg,#4a4a5a,#232330);
+    border:1px solid var(--border);
+  }
+  .profile-name{font-family:'Fraunces',serif; font-weight:700; font-size:32px; letter-spacing:-0.01em;}
+  .profile-name .joined{font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--text-dim); font-weight:400; margin-left:10px;}
+  .profile-bio{color:#c4c8d2; font-size:14px; line-height:1.6; max-width:560px; margin:12px 0 18px;}
+  .profile-actions{display:flex; flex-direction:column; gap:8px;}
+
+  .stats-row{display:flex; gap:36px; margin-bottom:36px;}
+  .stat-block .stat-num{font-family:'IBM Plex Mono',monospace; font-size:24px; font-weight:500;}
+  .stat-block .stat-label{font-family:'IBM Plex Mono',monospace; font-size:10px; letter-spacing:0.1em; text-transform:uppercase; color:var(--text-dim); margin-top:2px;}
+  .stat-block.films .stat-num{color:var(--gold);}
+  .stat-block.games .stat-num{color:var(--green);}
+  .stat-block.albums .stat-num{color:var(--purple);}
+
+  .profile-tabs{display:flex; gap:28px; border-bottom:1px solid var(--border); margin-bottom:32px;}
+  .profile-tabs .ptab{
+    font-family:'IBM Plex Mono',monospace; font-size:12px; letter-spacing:0.06em; text-transform:uppercase;
+    color:var(--text-dim); padding-bottom:14px; cursor:pointer; border-bottom:2px solid transparent;
+  }
+  .profile-tabs .ptab.active{color:var(--text); border-bottom-color:var(--gold);}
+
+  .fav-heading{display:flex; align-items:baseline; gap:10px; margin-bottom:6px;}
+  .fav-heading h2{font-family:'Fraunces',serif; font-size:22px; font-weight:600;}
+  .fav-heading .fav-tag{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--gold);}
+  .fav-sub{color:var(--text-muted); font-size:13px; margin-bottom:22px;}
+
+  /* ---- TMDB search block ---- */
+  .tmdb-block{
+    margin-bottom:44px;
+  }
+  .tmdb-title{font-family:'Fraunces',serif; font-weight:600; font-size:17px; margin-bottom:4px;}
+  .tmdb-row{display:flex; gap:8px; margin-bottom:8px;}
+  .tmdb-row input{
+    flex:1; background:var(--surface-2); border:1px solid var(--border); border-radius:6px;
+    padding:12px 14px; color:var(--text); font-family:'IBM Plex Mono',monospace; font-size:13px;
+  }
+  .tmdb-row input::placeholder{color:var(--text-dim);}
+  .tmdb-row input:focus{outline:none; border-color:var(--gold);}
+  .search-icon-btn{
+    display:flex; align-items:center; justify-content:center;
+    width:44px; height:44px; padding:0; flex-shrink:0;
+  }
+  .tmdb-status{font-family:'IBM Plex Mono',monospace; font-size:11px; margin-top:6px; min-height:16px;}
+  .tmdb-status.ok{color:var(--green);}
+  .tmdb-status.err{color:var(--rose);}
+  .tmdb-status.pending{color:var(--text-dim);}
+
+  .tmdb-results{
+    display:grid; grid-template-columns:repeat(auto-fill,minmax(140px,1fr)); gap:16px; margin-top:18px;
+  }
+  .tmdb-card{
+    background:var(--surface-2); border:1px solid var(--border); border-radius:8px; overflow:hidden;
+  }
+  .tmdb-card img{width:100%; aspect-ratio:2/3; object-fit:cover; display:block; background:var(--surface-2); cursor:pointer;}
+  .tmdb-card .noposter{
+    width:100%; aspect-ratio:2/3; display:flex; align-items:center; justify-content:center;
+    color:var(--text-dim); font-size:11px; text-align:center; padding:10px; font-family:'IBM Plex Mono',monospace;
+  }
+  .tmdb-card .tc-info{padding:10px 12px 12px;}
+  .tmdb-card .tc-title{font-family:'Fraunces',serif; font-size:13px; font-weight:600; line-height:1.25; margin-bottom:2px;}
+  .tmdb-card .tc-year{font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--text-dim); margin-bottom:8px;}
+  .tmdb-card .tc-add{
+    width:100%; font-family:'IBM Plex Mono',monospace; font-size:11px; padding:6px 0;
+    background:transparent; border:1px solid var(--border); border-radius:5px; color:var(--text-muted); cursor:pointer;
+  }
+  .tmdb-card .tc-add:hover{border-color:var(--gold); color:var(--gold);}
+  .tmdb-card .tc-add.added{border-color:var(--green); color:var(--green); cursor:default;}
+
+  /* ---- auth panel ---- */
+  #auth-pill{
+    background:var(--gold); color:#0a0a0d; padding:6px 14px; border-radius:6px;
+    font-weight:500; cursor:pointer;
+  }
+  #auth-pill:hover{opacity:0.9;}
+  #auth-overlay{
+    display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6);
+    align-items:flex-start; justify-content:center; z-index:100; padding-top:100px;
+  }
+  #auth-overlay.show{display:flex;}
+  #edit-overlay{
+    display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6);
+    align-items:flex-start; justify-content:center; z-index:100; padding-top:100px;
+  }
+  #edit-overlay.show{display:flex;}
+  .auth-box{
+    background:var(--surface); border:1px solid var(--border); border-radius:12px;
+    width:340px; padding:28px;
+  }
+  .auth-tabs{display:flex; gap:4px; margin-bottom:20px; background:var(--surface-2); border-radius:8px; padding:4px;}
+  .auth-tab{
+    flex:1; text-align:center; padding:8px; border-radius:6px; cursor:pointer;
+    font-family:'IBM Plex Mono',monospace; font-size:12px; color:var(--text-muted);
+  }
+  .auth-tab.active{background:var(--gold); color:#0a0a0d;}
+  .auth-field{margin-bottom:12px;}
+  .auth-field label{display:block; font-family:'IBM Plex Mono',monospace; font-size:11px; color:var(--text-dim); margin-bottom:5px;}
+  .auth-field input{
+    width:100%; background:var(--surface-2); border:1px solid var(--border); border-radius:6px;
+    padding:9px 12px; color:var(--text); font-size:13px;
+  }
+  .auth-field input:focus{outline:none; border-color:var(--gold);}
+  .auth-submit{width:100%; margin-top:6px; padding:11px;}
+  .auth-close{position:absolute; top:16px; right:20px; cursor:pointer; color:var(--text-dim); font-size:18px;}
+  .auth-box{position:relative;}
+  .auth-status{font-family:'IBM Plex Mono',monospace; font-size:11px; margin-top:10px; min-height:14px;}
+  .auth-status.err{color:var(--rose);}
+  .auth-status.ok{color:var(--green);}
+
+  .entry-status{font-family:'IBM Plex Mono',monospace; font-size:11px; margin-top:10px;}
+  .entry-status.err{color:var(--rose);}
+  .entry-status.ok{color:var(--green);}
+
+  .rating-picker{display:flex;align-items:center;gap:10px;margin-top:12px;}
+  .rating-picker label{font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--text-dim);}
+  .rating-picker select{
+    background:var(--surface-2);border:1px solid var(--border);border-radius:6px;
+    color:var(--text);padding:7px 10px;font-family:'IBM Plex Mono',monospace;font-size:12px;
+  }
+  .rating-picker select:focus{outline:none;border-color:var(--gold);}
+  .search-open{width:100%;margin-top:7px;}
+  .empty-state{color:var(--text-dim);font-size:13px;padding:24px 0;}
+
+  .added-date{font-size:10px; color:var(--text-dim);}
+  .watchlist-remove{
+    width:100%; margin-top:8px; font-size:10px; padding:5px 0;
+    color:var(--text-dim); border-color:var(--border);
+  }
+  .watchlist-remove:hover{color:var(--rose); border-color:var(--rose);}
+  .profile-filters{
+    display:flex;flex-wrap:wrap;gap:8px;margin:0 0 20px;
+    padding:12px;border:1px solid var(--border);background:var(--surface);
+  }
+  .profile-filters select,.profile-filters input{
+    background:var(--surface-2);border:1px solid var(--border);border-radius:999px;
+    color:var(--text);padding:8px 14px;font-family:Arial, sans-serif;font-size:12px;
+  }
+  .profile-filters select:focus,.profile-filters input:focus{outline:none;border-color:var(--gold);}
+  .filter-label{font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--text-dim);align-self:center;}
+
+
+  @media (max-width:720px){
+    header.top{padding:16px 20px;}
+    nav.top-nav{gap:18px;}
+    main{padding:24px;}
+    .film-header{grid-template-columns:140px 1fr; gap:20px;}
+    .film-title{font-size:28px;}
+    .poster-lg{border-radius:6px;}
+  }
+</style>
+</head>
+<body>
+
+<header class="top">
+  <div class="wordmark" onclick="showLibrary()">meridian</div>
+  <nav class="top-nav">
+    <a href="#" class="active">Films</a>
+    <a href="#">Games</a>
+    <a href="#">Albums</a>
+  </nav>
+  <div class="profile-pill" id="profile-pill" onclick="goToMyProfile()" style="display:none;">
+    <div class="avatar-mini" id="header-avatar"></div>
+    <span id="header-username"></span>
+  </div>
+  <div id="auth-pill" onclick="openAuthPanel()">Войти / Регистрация</div>
+</header>
+
+<div id="auth-overlay">
+  <div class="auth-box">
+    <span class="auth-close" onclick="closeAuthPanel()">✕</span>
+    <div class="auth-tabs">
+      <div class="auth-tab active" id="tab-login" onclick="switchAuthTab('login')">Вход</div>
+      <div class="auth-tab" id="tab-register" onclick="switchAuthTab('register')">Регистрация</div>
+    </div>
+
+    <div id="login-form">
+      <div class="auth-field">
+        <label>Username</label>
+        <input type="text" id="login-username" placeholder="velvet_meridian">
+      </div>
+      <div class="auth-field">
+        <label>Пароль</label>
+        <input type="password" id="login-password" placeholder="••••••••">
+      </div>
+      <button class="btn primary auth-submit" onclick="doLogin()">Войти</button>
+    </div>
+
+    <div id="register-form" style="display:none;">
+      <div class="auth-field">
+        <label>Username</label>
+        <input type="text" id="register-username" placeholder="придумай логин">
+      </div>
+      <div class="auth-field">
+        <label>Пароль</label>
+        <input type="password" id="register-password" placeholder="минимум 6 символов">
+      </div>
+      <button class="btn primary auth-submit" onclick="doRegister()">Создать аккаунт</button>
+    </div>
+
+    <div class="auth-status" id="auth-status"></div>
+  </div>
+</div>
+
+<main>
+
+  <!-- ============ LIBRARY VIEW ============ -->
+  <div id="library">
+
+    <div class="lib-heading">
+      <h1 class="serif">meridian</h1>
+    </div>
+    <p class="lib-sub">Дневник фильмов, игр и музыки. Найди фильм через поиск или загляни в популярное ниже.</p>
+
+    <div class="tmdb-block">
+      <div class="tmdb-row">
+        <input type="text" id="tmdb-query-input" placeholder="Найти фильм" onkeydown="if(event.key==='Enter') searchTMDB()">
+        <button class="btn primary search-icon-btn" onclick="searchTMDB()" aria-label="Найти" title="Найти">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round">
+            <circle cx="11" cy="11" r="7"></circle>
+            <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="tmdb-status" id="tmdb-status"></div>
+      <div class="tmdb-results" id="tmdb-results"></div>
+    </div>
+
+    <div class="fav-heading" style="margin-top:12px;">
+      <h2>Популярное сейчас</h2>
+    </div>
+    <p class="fav-sub" id="popular-status">Загружаю...</p>
+    <div class="grid" id="popular-grid"></div>
+
+    <div class="fav-heading" style="margin-top:12px;">
+      <h2>Вы хотели посмотреть</h2>
+    </div>
+    <p class="fav-sub" id="home-watchlist-empty">Тут пока пусто, добавьте пару фильмов в свой Watchlist</p>
+    <div class="grid" id="home-watchlist-grid"></div>
+  </div>
+
+  <!-- ============ DETAIL VIEW ============ -->
+  <div id="detail">
+    <div class="back-link" onclick="showLibrary()">← back to films</div>
+    <div id="detail-content"></div>
+  </div>
+
+  <!-- ============ PROFILE VIEW ============ -->
+  <div id="profile">
+    <div class="back-link" onclick="showLibrary()">← back to films</div>
+
+    <div class="profile-header">
+      <div class="avatar-lg" id="profile-avatar"></div>
+      <div>
+        <div class="profile-name" id="profile-username">—</div>
+        <p class="profile-bio" id="profile-bio-text"></p>
+      </div>
+      <div class="profile-actions">
+        <button class="btn ghost" onclick="openEditProfile()">Edit profile</button>
+      </div>
+    </div>
+
+    <div class="stats-row">
+      <div class="stat-block films"><div class="stat-num mono" id="stat-films">0</div><div class="stat-label">Films</div></div>
+    </div>
+
+    <div class="import-block">
+      <label class="btn ghost import-btn">
+        Импортировать оценки (.csv)
+        <input type="file" id="imdb-import-file" accept=".csv" onchange="handleImdbImport(event)" hidden>
+      </label>
+      <div class="import-status" id="import-status"></div>
+    </div>
+
+    <div class="fav-heading">
+      <h2>Watched</h2>
+    </div>
+    <p class="fav-sub" id="profile-empty-hint">Пока ничего не отмечено — открой фильм и нажми "✓ Watched".</p>
+
+    <div class="profile-filters">
+      <span class="filter-label">ФИЛЬТРЫ</span>
+      <select id="filter-rating" onchange="applyProfileFilters()">
+        <option value="">Любая оценка</option>
+        <option value="10">10/10</option>
+        <option value="9">9+</option>
+        <option value="8">8+</option>
+        <option value="7">7+</option>
+        <option value="6">6+</option>
+        <option value="5">5+</option>
+        <option value="4">4+</option>
+        <option value="3">3+</option>
+        <option value="2">2+</option>
+        <option value="1">1+</option>
+      </select>
+      <select id="filter-rating-exact" onchange="applyProfileFilters()">
+        <option value="">Точная оценка</option>
+        <option value="10">10</option>
+        <option value="9">9</option>
+        <option value="8">8</option>
+        <option value="7">7</option>
+        <option value="6">6</option>
+        <option value="5">5</option>
+        <option value="4">4</option>
+        <option value="3">3</option>
+        <option value="2">2</option>
+        <option value="1">1</option>
+      </select>
+      <input id="filter-year-from" type="number" placeholder="Год от" min="1880" max="2100" onchange="applyProfileFilters()">
+      <input id="filter-year-to" type="number" placeholder="Год до" min="1880" max="2100" onchange="applyProfileFilters()">
+      <select id="filter-genre" onchange="applyProfileFilters()">
+        <option value="">Любой жанр</option>
+      </select>
+      <button class="btn ghost" onclick="resetProfileFilters()">Сбросить</button>
+    </div>
+
+    <div class="grid" id="profile-grid"></div>
+
+    <div class="fav-heading" style="margin-top:44px;">
+      <h2>Watchlist</h2>
+    </div>
+    <p class="fav-sub" id="watchlist-empty-hint">Пока пусто — открой фильм и нажми "+ Watchlist".</p>
+
+    <div class="grid" id="watchlist-grid"></div>
+  </div>
+
+  <!-- ============ EDIT PROFILE OVERLAY ============ -->
+  <div id="edit-overlay" class="auth-overlay-like">
+    <div class="auth-box">
+      <span class="auth-close" onclick="closeEditProfile()">✕</span>
+      <div class="tmdb-title serif" style="margin-bottom:16px;">Редактировать профиль</div>
+      <div class="auth-field">
+        <label>Аватар</label>
+        <div class="avatar-upload-row">
+          <div class="avatar-mini avatar-upload-preview" id="avatar-preview"></div>
+          <label class="btn ghost avatar-upload-btn">
+            Загрузить с устройства
+            <input type="file" id="edit-avatar-file" accept="image/*" onchange="handleAvatarFileSelect(event)" hidden>
+          </label>
+        </div>
+        <input type="text" id="edit-avatar-input" placeholder="или вставь ссылку на картинку" onchange="handleAvatarUrlInput()" style="margin-top:8px;">
+      </div>
+      <div class="auth-field">
+        <label>О себе</label>
+        <input type="text" id="edit-bio-input" placeholder="Пара слов о себе">
+      </div>
+      <button class="btn primary auth-submit" onclick="saveProfile()">Сохранить</button>
+      <div class="auth-status" id="edit-status"></div>
+    </div>
+  </div>
+
+</main>
+
+<script>
+const films = [];
+
+function escapeHtml(value){
+  return String(value ?? '').replace(/[&<>"']/g, ch => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[ch]));
+}
+
+function starString(r){
+  const full = Math.floor(r);
+  const half = r % 1 !== 0;
+  return "★".repeat(full) + (half ? "½" : "");
+}
+
+async function loadPopularFilms(){
+  const grid = document.getElementById('popular-grid');
+  const statusEl = document.getElementById('popular-status');
+
+  try{
+    const res = await fetch(`${API_BASE}/tmdb/popular`);
+    if(!res.ok){
+      statusEl.textContent = 'Не получилось загрузить популярные фильмы.';
+      return;
+    }
+    const data = await res.json();
+    window._popularFilmsCache = data.results || [];
+
+    statusEl.textContent = '';
+    grid.innerHTML = window._popularFilmsCache.slice(0, 12).map(m => {
+      const year = m.release_date ? m.release_date.slice(0,4) : '—';
+      const posterBg = m.poster_path
+        ? `url(${TMDB_IMG_BASE}${m.poster_path}) center/cover`
+        : 'linear-gradient(160deg,#3a3a4a,#1a1a22)';
+      return `
+        <div class="card" onclick="openPopularFilm(${m.id})">
+          <div class="poster" style="background:${posterBg}"></div>
+          <div class="info">
+            <div class="title serif">${escapeHtml(m.title)}</div>
+            <div class="meta-row">
+              <span class="year mono">${year}</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+  }catch(err){
+    statusEl.textContent = 'Сервер не отвечает — не получилось загрузить популярное.';
+  }
+}
+
+function openPopularFilm(id){
+  window._tmdbLastResults = window._popularFilmsCache || [];
+  openTMDBFilm(id);
+}
+
+// Строит таймлайн: прямая линия с точками, где расстояние между
+// точками пропорционально реальному промежутку времени между
+// сменами оценки — а не просто одинаковые отступы.
+function renderRatingTimeline(history){
+  if(!history || history.length === 0){
+    return `<p class="fav-sub" style="margin:10px 0 0;">Пока нет истории — поставь оценку, чтобы она здесь появилась.</p>`;
+  }
+
+  if(history.length === 1){
+    const p = history[0];
+    return `
+      <div class="tl-track">
+        <div class="tl-line"></div>
+        <div class="tl-rating" style="left:50%">${p.rating}</div>
+        <div class="tl-circle" style="left:50%"></div>
+        <div class="tl-date mono" style="left:50%">${p.rated_date}</div>
+      </div>
+    `;
+  }
+
+  const times = history.map(p => new Date(p.rated_date).getTime());
+  const t0 = times[0];
+  const tN = times[times.length - 1];
+  const span = tN - t0;
+
+  const points = history.map((p, i) => ({
+    ...p,
+    pct: span > 0 ? ((times[i] - t0) / span * 100) : (i / (history.length - 1) * 100)
+  }));
+
+  return `
+    <div class="tl-track">
+      <div class="tl-line"></div>
+      ${points.map(p => `<div class="tl-rating" style="left:${p.pct}%">${p.rating}</div>`).join('')}
+      ${points.map(p => `<div class="tl-circle" style="left:${p.pct}%"></div>`).join('')}
+      ${points.map(p => `<div class="tl-date mono" style="left:${p.pct}%">${p.rated_date}</div>`).join('')}
+    </div>
+  `;
+}
+
+function renderDetail(f){
+  const others = films.filter(x => x.id !== f.id);
+  return `
+    <div class="film-header">
+      <div class="poster-lg" style="background:${f.poster}; aspect-ratio:2/3;"></div>
+      <div>
+        <h1 class="film-title">${f.title}</h1>
+        <div class="film-byline">${f.director} <span class="yr">· ${f.year}</span></div>
+
+        <div class="rating-row">
+          <span class="stars-lg">${starString(f.rating)}</span>
+          <span class="rating-num">community avg</span>
+        </div>
+
+        <div class="tag-row">
+          ${f.tags.map(t => `<span class="tag">${t}</span>`).join('')}
+        </div>
+
+        <p class="synopsis">${f.synopsis}</p>
+
+        <div class="action-row">
+          <button class="btn primary" onclick="markWatched('${f.id}')">✓ Watched</button>
+          <button class="btn ghost" onclick="addToWatchlist('${f.id}')">+ Watchlist</button>
+        </div>
+        <div class="rating-picker">
+          <label for="film-rating">Твоя оценка</label>
+          <select id="film-rating" onchange="saveFilmRating('${f.id}', this.value)">
+            <option value="0">— / 10</option>
+            ${Array.from({length:10},(_,i)=>`<option value="${i+1}" ${Number(f.yourRating)===i+1?'selected':''}>${i+1} / 10</option>`).join('')}
+          </select>
+        </div>
+        <div class="entry-status" id="entry-status"></div>
+      </div>
+    </div>
+
+    <div class="section-label">Viewing History</div>
+    <div class="entry-card">
+      <div class="entry-top">
+        <span class="stars-lg">${f.yourRating ? `${f.yourRating}/10` : 'Без оценки'}</span>
+      </div>
+      <p class="entry-text">${f.entryText}</p>
+      ${renderRatingTimeline(f.ratingHistory)}
+    </div>
+
+    <div class="section-label">Cast</div>
+    <div class="cast-row">
+      ${f.cast.map(c => `
+        <div class="cast-chip">
+          <div class="headshot">${c.n.split(' ').map(w=>w[0]).join('')}</div>
+          <div class="cname">${c.n}</div>
+          <div class="crole">${c.r}</div>
+        </div>
+      `).join('')}
+    </div>
+
+    <div class="section-label">More like this</div>
+    <div class="similar-grid">
+      ${others.map(o => `
+        <div class="card" onclick="showDetail('${o.id}')">
+          <div class="poster" style="background:${o.poster}"></div>
+          <div class="info">
+            <div class="title serif">${o.title}</div>
+            <div class="director">${o.director}</div>
+          </div>
+        </div>
+      `).join('')}
+    </div>
+  `;
+}
+
+function hideAllViews(){
+  document.getElementById('library').classList.add('hide');
+  document.getElementById('detail').classList.remove('show');
+  document.getElementById('profile').classList.remove('show');
+}
+
+function showDetail(id){
+  const f = films.find(x => x.id === id) ||
+            (window._openFilmCache || {})[id];
+  if(!f) return;
+  document.getElementById('detail-content').innerHTML = renderDetail(f);
+  hideAllViews();
+  document.getElementById('detail').classList.add('show');
+  window.scrollTo(0,0);
+}
+
+function showLibrary(){
+  hideAllViews();
+  document.getElementById('library').classList.remove('hide');
+  window.scrollTo(0,0);
+}
+
+function showProfile(){
+  hideAllViews();
+  document.getElementById('profile').classList.add('show');
+  window.scrollTo(0,0);
+}
+
+// ================= Свой backend-сервер =================
+// Раньше здесь был жёстко прописан адрес http://localhost:3000/api —
+// он работал, только пока сайт открыт с того же компьютера. Теперь
+// сервер сам раздаёт этот HTML-файл, поэтому сайт и API всегда живут
+// на одном и том же адресе — используем относительный путь, он
+// сработает и на localhost, и после публикации на хостинге, без правок.
+const API_BASE = '/api';
+
+// Токен и логин сохраняются в localStorage — это память браузера,
+// которая переживает закрытие вкладки и обновление страницы.
+// При открытии сайта мы читаем их и сразу "вспоминаем" пользователя,
+// не заставляя вводить пароль каждый раз заново.
+let authToken = localStorage.getItem('meridian_token');
+let currentUser = localStorage.getItem('meridian_username');
+let currentProfile = null; // сюда ляжет ответ сервера: bio, avatar_url, entries
+
+function openAuthPanel(){
+  document.getElementById('auth-overlay').classList.add('show');
+}
+function closeAuthPanel(){
+  document.getElementById('auth-overlay').classList.remove('show');
+  document.getElementById('auth-status').textContent = '';
+}
+function switchAuthTab(tab){
+  document.getElementById('tab-login').classList.toggle('active', tab === 'login');
+  document.getElementById('tab-register').classList.toggle('active', tab === 'register');
+  document.getElementById('login-form').style.display = tab === 'login' ? 'block' : 'none';
+  document.getElementById('register-form').style.display = tab === 'register' ? 'block' : 'none';
+  document.getElementById('auth-status').textContent = '';
+}
+
+function setAuthStatus(text, kind){
+  const el = document.getElementById('auth-status');
+  el.textContent = text;
+  el.className = 'auth-status ' + (kind || '');
+}
+
+function persistLogin(token, username){
+  authToken = token;
+  currentUser = username;
+  localStorage.setItem('meridian_token', token);
+  localStorage.setItem('meridian_username', username);
+}
+
+async function doRegister(){
+  const username = document.getElementById('register-username').value.trim();
+  const password = document.getElementById('register-password').value;
+
+  if(!username || !password){
+    setAuthStatus('Заполни оба поля.', 'err');
+    return;
+  }
+
+  setAuthStatus('Регистрирую...', '');
+  try{
+    const res = await fetch(`${API_BASE}/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    const data = await res.json();
+
+    if(!res.ok){
+      setAuthStatus(data.error || 'Не получилось зарегистрироваться.', 'err');
+      return;
+    }
+
+    persistLogin(data.token, data.username);
+    setAuthStatus('Готово! Ты вошёл как ' + currentUser, 'ok');
+    updateAuthUI();
+    loadOwnProfile();
+    setTimeout(closeAuthPanel, 800);
+
+  }catch(err){
+    setAuthStatus('Сервер не отвечает. Он точно запущен на localhost:3000?', 'err');
+  }
+}
+
+async function doLogin(){
+  const username = document.getElementById('login-username').value.trim();
+  const password = document.getElementById('login-password').value;
+
+  if(!username || !password){
+    setAuthStatus('Заполни оба поля.', 'err');
+    return;
+  }
+
+  setAuthStatus('Вхожу...', '');
+  try{
+    const res = await fetch(`${API_BASE}/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username, password })
+    });
+    const data = await res.json();
+
+    if(!res.ok){
+      setAuthStatus(data.error || 'Не получилось войти.', 'err');
+      return;
+    }
+
+    persistLogin(data.token, data.username);
+    setAuthStatus('Готово! Ты вошёл как ' + currentUser, 'ok');
+    updateAuthUI();
+    loadOwnProfile();
+    setTimeout(closeAuthPanel, 800);
+
+  }catch(err){
+    setAuthStatus('Сервер не отвечает. Он точно запущен на localhost:3000?', 'err');
+  }
+}
+
+function doLogout(){
+  authToken = null;
+  currentUser = null;
+  currentProfile = null;
+  localStorage.removeItem('meridian_token');
+  localStorage.removeItem('meridian_username');
+  updateAuthUI();
+  showLibrary();
+}
+
+function updateAuthUI(){
+  const authPill = document.getElementById('auth-pill');
+  const profilePill = document.getElementById('profile-pill');
+
+  if(currentUser){
+    authPill.textContent = 'Выйти';
+    authPill.onclick = doLogout;
+    profilePill.style.display = 'flex';
+    document.getElementById('header-username').textContent = currentUser;
+  }else{
+    authPill.textContent = 'Войти / Регистрация';
+    authPill.onclick = openAuthPanel;
+    profilePill.style.display = 'none';
+  }
+}
+
+// ---- загрузка своего профиля с сервера (публичный эндпоинт по username) ----
+async function loadOwnProfile(){
+  if(!currentUser) return;
+  try{
+    const res = await fetch(`${API_BASE}/profile/${encodeURIComponent(currentUser)}`);
+    if(!res.ok) return;
+    currentProfile = await res.json();
+    renderProfileFromServer();
+
+    if(currentProfile.avatar_url){
+      document.getElementById('header-avatar').style.background =
+        `url(${currentProfile.avatar_url}) center/cover`;
+    }
+  }catch(err){
+    // сервер недоступен — просто оставляем то, что уже показано
+  }
+}
+
+function goToMyProfile(){
+  if(!currentUser){
+    openAuthPanel();
+    return;
+  }
+  hideAllViews();
+  document.getElementById('profile').classList.add('show');
+  window.scrollTo(0,0);
+  loadOwnProfile();
+}
+
+function getFilteredProfileEntries(){
+  const entries = (currentProfile?.entries || []).filter(e => e.status !== 'watchlist');
+  const minRating = Number(document.getElementById('filter-rating')?.value || 0);
+  const exactRating = Number(document.getElementById('filter-rating-exact')?.value || 0);
+  const yearFrom = Number(document.getElementById('filter-year-from')?.value || 0);
+  const yearTo = Number(document.getElementById('filter-year-to')?.value || 9999);
+  const genre = (document.getElementById('filter-genre')?.value || '').trim().toLowerCase();
+
+  return entries
+    .filter(e => {
+      const rating = Number(e.rating) || 0;
+      const year = Number(e.release_year) || 0;
+      const genres = String(e.genres || '').split(',').map(x => x.trim().toLowerCase()).filter(Boolean);
+
+      if(minRating && rating < minRating) return false;
+      if(exactRating && rating !== exactRating) return false;
+      if(yearFrom && (!year || year < yearFrom)) return false;
+      if(yearTo && (!year || year > yearTo)) return false;
+      if(genre && !genres.includes(genre)) return false;
+      return true;
+    })
+    .sort((a,b) => {
+      const ra = Number(a.rating) || 0;
+      const rb = Number(b.rating) || 0;
+      if(rb !== ra) return rb - ra;
+      const ya = Number(a.release_year) || 0;
+      const yb = Number(b.release_year) || 0;
+      if(yb !== ya) return yb - ya;
+      return String(b.watched_date || '').localeCompare(String(a.watched_date || ''));
+    });
+}
+
+function populateGenreFilter(){
+  const select = document.getElementById('filter-genre');
+  if(!select || !currentProfile) return;
+
+  const current = select.value;
+  const genres = new Set();
+
+  (currentProfile.entries || []).forEach(e => {
+    String(e.genres || '').split(',').map(x => x.trim()).filter(Boolean).forEach(g => genres.add(g));
+  });
+
+  select.innerHTML = '<option value="">Любой жанр</option>' +
+    [...genres].sort((a,b) => a.localeCompare(b, 'ru')).map(g =>
+      `<option value="${escapeHtml(g.toLowerCase())}">${escapeHtml(g)}</option>`
+    ).join('');
+
+  if([...genres].some(g => g.toLowerCase() === current)) select.value = current;
+}
+
+function applyProfileFilters(){
+  if(!currentProfile) return;
+
+  const entries = getFilteredProfileEntries();
+  const grid = document.getElementById('profile-grid');
+
+  grid.innerHTML = entries.map(e => {
+    const posterBg = e.poster_path
+      ? `url(${e.poster_path}) center/cover`
+      : 'linear-gradient(160deg,#3a3a4a,#1a1a22)';
+    return `
+      <div class="card" onclick="openEntryIfPossible(${e.tmdb_id})">
+        <div class="poster" style="background:${posterBg}"></div>
+        <div class="info">
+          <div class="title serif">${escapeHtml(e.title)}</div>
+          <div class="meta-row">
+            <span class="year mono">${e.release_year || '—'}</span>
+            <span class="stars">${e.rating ? `${e.rating}/10` : '—'}</span>
+          </div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  if(!entries.length && (currentProfile.entries || []).length){
+    grid.innerHTML = '<div class="empty-state">По выбранным фильтрам ничего не найдено.</div>';
+  }
+}
+
+function watchlistCardHtml(e){
+  const posterBg = e.poster_path
+    ? `url(${e.poster_path}) center/cover`
+    : 'linear-gradient(160deg,#3a3a4a,#1a1a22)';
+  return `
+    <div class="card">
+      <div class="poster" style="background:${posterBg}" onclick="openEntryIfPossible(${e.tmdb_id})"></div>
+      <div class="info">
+        <div class="title serif" onclick="openEntryIfPossible(${e.tmdb_id})">${escapeHtml(e.title)}</div>
+        <div class="meta-row">
+          <span class="year mono">${e.release_year || '—'}</span>
+        </div>
+        <button class="btn ghost watchlist-remove" onclick="removeFromWatchlist(${e.tmdb_id}, event)">✕ убрать</button>
+      </div>
+    </div>
+  `;
+}
+
+function renderWatchlistGrid(){
+  const entries = (currentProfile?.entries || []).filter(e => e.status === 'watchlist');
+  const grid = document.getElementById('watchlist-grid');
+  document.getElementById('watchlist-empty-hint').style.display = entries.length ? 'none' : 'block';
+  grid.innerHTML = entries.map(watchlistCardHtml).join('');
+  renderHomeWatchlist();
+}
+
+function renderHomeWatchlist(){
+  const entries = (currentProfile?.entries || []).filter(e => e.status === 'watchlist');
+  const grid = document.getElementById('home-watchlist-grid');
+  if(!grid) return;
+  document.getElementById('home-watchlist-empty').style.display = entries.length ? 'none' : 'block';
+  grid.innerHTML = entries.map(watchlistCardHtml).join('');
+}
+
+async function addToWatchlist(filmId){
+  const statusEl = document.getElementById('entry-status');
+  const f = films.find(x => x.id === filmId) || (window._openFilmCache || {})[filmId];
+  if(!f) return;
+
+  if(!authToken){
+    statusEl.textContent = 'Сначала войди или зарегистрируйся, чтобы сохранять фильмы.';
+    statusEl.className = 'entry-status err';
+    return;
+  }
+
+  statusEl.textContent = 'Добавляю в watchlist...';
+  statusEl.className = 'entry-status';
+
+  const tmdbNumericId = f.tmdbId || (f.id.startsWith('tmdb-') ? parseInt(f.id.replace('tmdb-','')) : 0);
+
+  try{
+    const res = await fetch(`${API_BASE}/watchlist`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + authToken
+      },
+      body: JSON.stringify({
+        tmdb_id: tmdbNumericId,
+        title: f.title,
+        poster_path: f.posterUrl || '',
+        release_year: f.releaseYear || (f.year && f.year !== '—' ? Number(f.year) : null),
+        genres: f.genres || []
+      })
+    });
+
+    const data = await res.json();
+    if(!res.ok){
+      statusEl.textContent = data.error || 'Не получилось добавить в watchlist.';
+      statusEl.className = 'entry-status err';
+      if(res.status === 401){ doLogout(); }
+      return;
+    }
+
+    if(data.status === 'watched'){
+      statusEl.textContent = 'Этот фильм уже отмечен как просмотренный — в watchlist не добавлен.';
+      statusEl.className = 'entry-status';
+    }else{
+      statusEl.textContent = '✓ Добавлено в watchlist';
+      statusEl.className = 'entry-status ok';
+    }
+    await loadOwnProfile();
+
+  }catch(err){
+    statusEl.textContent = 'Сервер не отвечает. Он точно запущен на localhost:3000?';
+    statusEl.className = 'entry-status err';
+  }
+}
+
+async function removeFromWatchlist(tmdbId, event){
+  if(event) event.stopPropagation();
+  if(!authToken) return;
+
+  try{
+    await fetch(`${API_BASE}/watchlist/${tmdbId}`, {
+      method: 'DELETE',
+      headers: { 'Authorization': 'Bearer ' + authToken }
+    });
+    await loadOwnProfile();
+  }catch(err){
+    // сервер недоступен — просто оставляем как есть, пользователь может попробовать снова
+  }
+}
+
+function resetProfileFilters(){
+  document.getElementById('filter-rating').value = '';
+  document.getElementById('filter-rating-exact').value = '';
+  document.getElementById('filter-year-from').value = '';
+  document.getElementById('filter-year-to').value = '';
+  document.getElementById('filter-genre').value = '';
+  applyProfileFilters();
+}
+
+function renderProfileFromServer(){
+  if(!currentProfile) return;
+
+  document.getElementById('profile-username').textContent = currentProfile.username;
+  document.getElementById('profile-bio-text').textContent =
+    currentProfile.bio || 'Пока ничего не написано о себе.';
+
+  const avatarEl = document.getElementById('profile-avatar');
+  if(currentProfile.avatar_url){
+    avatarEl.style.background = `url(${currentProfile.avatar_url}) center/cover`;
+  }else{
+    avatarEl.style.background = 'linear-gradient(160deg,#4a4a5a,#232330)';
+  }
+
+  const watchedEntries = (currentProfile.entries || []).filter(e => e.status !== 'watchlist');
+  document.getElementById('stat-films').textContent = watchedEntries.length;
+  document.getElementById('profile-empty-hint').style.display =
+    watchedEntries.length ? 'none' : 'block';
+
+  populateGenreFilter();
+  applyProfileFilters();
+  renderWatchlistGrid();
+}
+
+async function openEntryIfPossible(tmdbId){
+  const localId = 'tmdb-' + tmdbId;
+  const cached = films.find(x => x.id === localId) || (window._openFilmCache || {})[localId];
+
+  if(cached){
+    // Кэш мог быть сохранён до того, как оценка появилась (или
+    // изменилась) в профиле — освежаем эти поля прямо перед показом,
+    // чтобы страница не показывала устаревшую оценку.
+    const existingEntry = (currentProfile?.entries || []).find(e => e.tmdb_id === tmdbId);
+    cached.yourRating = existingEntry?.rating || 0;
+    cached.entryText = existingEntry?.review || "";
+    cached.entryDate = existingEntry?.watched_date || "";
+    cached.watchDates = existingEntry?.watched_date ? [existingEntry.watched_date] : [];
+    cached.ratingHistory = (currentProfile?.history || {})[tmdbId] || [];
+    showDetail(cached.id);
+    return;
+  }
+
+  try{
+    const url = `${API_BASE}/tmdb/movie/${tmdbId}`;
+    const res = await fetch(url);
+    if(!res.ok) return;
+    const m = await res.json();
+
+    window._tmdbLastResults = [m];
+    await openTMDBFilm(m.id);
+  }catch(err){}
+}
+
+// ---- редактирование профиля ----
+function openEditProfile(){
+  if(!currentUser){
+    openAuthPanel();
+    return;
+  }
+  const avatarUrl = currentProfile ? currentProfile.avatar_url || '' : '';
+  document.getElementById('edit-avatar-input').value = avatarUrl;
+  document.getElementById('edit-bio-input').value = currentProfile ? currentProfile.bio || '' : '';
+  document.getElementById('avatar-preview').style.background = avatarUrl
+    ? `url(${avatarUrl}) center/cover`
+    : 'linear-gradient(160deg,#4a4a5a,#232330)';
+  document.getElementById('edit-overlay').classList.add('show');
+}
+
+function handleAvatarUrlInput(){
+  const val = document.getElementById('edit-avatar-input').value.trim();
+  document.getElementById('avatar-preview').style.background = val
+    ? `url(${val}) center/cover`
+    : 'linear-gradient(160deg,#4a4a5a,#232330)';
+}
+
+function handleAvatarFileSelect(event){
+  const file = event.target.files[0];
+  if(!file) return;
+
+  const reader = new FileReader();
+  reader.onload = () => {
+    // Превращаем файл в data URL — текстовую строку, которая содержит
+    // саму картинку целиком (как base64). Это позволяет обойтись без
+    // отдельного хранилища файлов и просто сохранить строку в базе,
+    // как обычный текст avatar_url.
+    document.getElementById('edit-avatar-input').value = reader.result;
+    document.getElementById('avatar-preview').style.background = `url(${reader.result}) center/cover`;
+  };
+  reader.readAsDataURL(file);
+}
+function closeEditProfile(){
+  document.getElementById('edit-overlay').classList.remove('show');
+  document.getElementById('edit-status').textContent = '';
+}
+
+async function saveProfile(){
+  const avatar_url = document.getElementById('edit-avatar-input').value.trim();
+  const bio = document.getElementById('edit-bio-input').value.trim();
+  const statusEl = document.getElementById('edit-status');
+
+  statusEl.textContent = 'Сохраняю...';
+  statusEl.className = 'auth-status';
+
+  try{
+    const res = await fetch(`${API_BASE}/profile`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + authToken
+      },
+      body: JSON.stringify({ bio, avatar_url })
+    });
+
+    if(!res.ok){
+      statusEl.textContent = 'Не получилось сохранить.';
+      statusEl.className = 'auth-status err';
+      return;
+    }
+
+    statusEl.textContent = '✓ Сохранено';
+    statusEl.className = 'auth-status ok';
+    await loadOwnProfile();
+    setTimeout(closeEditProfile, 600);
+
+  }catch(err){
+    statusEl.textContent = 'Сервер не отвечает.';
+    statusEl.className = 'auth-status err';
+  }
+}
+
+// ---- сохранение "я посмотрел этот фильм" на сервер ----
+
+// После сохранения оценки локальный объект фильма (f) успевает
+// устареть — освежаем его из свежезагруженного профиля и
+// перерисовываем страницу целиком, чтобы таймлайн сразу показал
+// новую точку, без необходимости заново открывать фильм
+function refreshDetailAfterSave(f, tmdbNumericId, statusMessage, statusKind){
+  const existingEntry = (currentProfile?.entries || []).find(e => e.tmdb_id === tmdbNumericId);
+  f.yourRating = existingEntry?.rating || f.yourRating;
+  f.entryText = existingEntry?.review || f.entryText;
+  f.ratingHistory = (currentProfile?.history || {})[tmdbNumericId] || [];
+
+  document.getElementById('detail-content').innerHTML = renderDetail(f);
+  const statusEl = document.getElementById('entry-status');
+  statusEl.textContent = statusMessage;
+  statusEl.className = 'entry-status ' + (statusKind || '');
+}
+
+async function saveFilmRating(filmId, value){
+  const rating = Number(value);
+  const f = films.find(x => x.id === filmId) || (window._openFilmCache || {})[filmId];
+  if(!f) return;
+
+  f.yourRating = rating;
+
+  if(!authToken){
+    const statusEl = document.getElementById('entry-status');
+    statusEl.textContent = 'Оценка показана локально. Войди, чтобы сохранить её в профиле.';
+    statusEl.className = 'entry-status err';
+    return;
+  }
+
+  const tmdbNumericId = f.tmdbId || (f.id.startsWith('tmdb-') ? parseInt(f.id.replace('tmdb-','')) : 0);
+  if(!tmdbNumericId) return;
+
+  const statusEl = document.getElementById('entry-status');
+  statusEl.textContent = 'Сохраняю оценку...';
+  statusEl.className = 'entry-status';
+
+  try{
+    const res = await fetch(`${API_BASE}/entries`, {
+      method:'POST',
+      headers:{
+        'Content-Type':'application/json',
+        'Authorization':'Bearer ' + authToken
+      },
+      body:JSON.stringify({
+        tmdb_id:tmdbNumericId,
+        title:f.title,
+        poster_path:f.posterUrl || '',
+        rating:rating || null,
+        review:f.entryText || '',
+        watched_date: new Date().toISOString().slice(0,10),
+        release_year: f.releaseYear || (f.year && f.year !== '—' ? Number(f.year) : null),
+        genres: f.genres || []
+      })
+    });
+
+    const data = await res.json();
+    if(!res.ok){
+      statusEl.textContent = data.error || 'Не получилось сохранить оценку.';
+      statusEl.className = 'entry-status err';
+      if(res.status === 401){ doLogout(); }
+      return;
+    }
+
+    await loadOwnProfile();
+    refreshDetailAfterSave(f, tmdbNumericId, '✓ Оценка сохранена', 'ok');
+  }catch(err){
+    statusEl.textContent = 'Сервер не отвечает.';
+    statusEl.className = 'entry-status err';
+  }
+}
+
+async function markWatched(filmId){
+  const statusEl = document.getElementById('entry-status');
+  const f = films.find(x => x.id === filmId) || (window._openFilmCache || {})[filmId];
+  if(!f) return;
+
+  if(!authToken){
+    statusEl.textContent = 'Сначала войди или зарегистрируйся, чтобы сохранять фильмы.';
+    statusEl.className = 'entry-status err';
+    return;
+  }
+
+  statusEl.textContent = 'Сохраняю...';
+  statusEl.className = 'entry-status';
+
+  const tmdbNumericId = f.tmdbId || (f.id.startsWith('tmdb-') ? parseInt(f.id.replace('tmdb-','')) : 0);
+
+  try{
+    const res = await fetch(`${API_BASE}/entries`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + authToken
+      },
+      body: JSON.stringify({
+        tmdb_id: tmdbNumericId,
+        title: f.title,
+        poster_path: f.posterUrl || '',
+        rating: f.yourRating || null,
+        review: f.entryText || '',
+        watched_date: new Date().toISOString().slice(0,10),
+        release_year: f.releaseYear || (f.year && f.year !== '—' ? Number(f.year) : null),
+        genres: f.genres || []
+      })
+    });
+
+    if(!res.ok){
+      const data = await res.json();
+      statusEl.textContent = data.error || 'Не получилось сохранить.';
+      statusEl.className = 'entry-status err';
+      if(res.status === 401){ doLogout(); }
+      return;
+    }
+
+    await loadOwnProfile();
+    refreshDetailAfterSave(f, tmdbNumericId, '✓ Сохранено в твоём профиле на сервере', 'ok');
+
+  }catch(err){
+    statusEl.textContent = 'Сервер не отвечает. Он точно запущен на localhost:3000?';
+    statusEl.className = 'entry-status err';
+  }
+}
+
+// При открытии страницы — если есть сохранённый вход, сразу
+// показываем шапку с логином и подгружаем профиль в фоне
+updateAuthUI();
+if(currentUser){
+  loadOwnProfile();
+}
+loadPopularFilms();
+
+// ================= TMDB integration =================
+const TMDB_IMG_BASE = "https://image.tmdb.org/t/p/w342";
+
+function setStatus(text, kind){
+  const el = document.getElementById('tmdb-status');
+  el.textContent = text;
+  el.className = 'tmdb-status ' + (kind || '');
+}
+
+async function searchTMDB(){
+  const query = document.getElementById('tmdb-query-input').value.trim();
+  const resultsEl = document.getElementById('tmdb-results');
+
+  if(!query){
+    setStatus('Введи название фильма для поиска.', 'err');
+    return;
+  }
+
+  setStatus('Ищу...', 'pending');
+  resultsEl.innerHTML = '';
+
+  try{
+    const url = `${API_BASE}/tmdb/search?query=${encodeURIComponent(query)}`;
+    const res = await fetch(url);
+
+    if(!res.ok){
+      setStatus(`Не получилось получить данные (код ${res.status}). Сервер точно запущен?`, 'err');
+      return;
+    }
+
+    const data = await res.json();
+
+    if(!data.results || data.results.length === 0){
+      setStatus('Ничего не найдено — попробуй другое название.', 'err');
+      return;
+    }
+
+    const shown = Math.min(8, data.results.length);
+    const total = data.total_results ?? data.results.length;
+    setStatus(`Показано ${shown} из ${total}`, 'ok');
+    resultsEl.innerHTML = data.results.slice(0, 8).map(m => {
+      const year = m.release_date ? m.release_date.slice(0,4) : '—';
+      const posterHtml = m.poster_path
+        ? `<img src="${TMDB_IMG_BASE}${m.poster_path}" alt="${m.title}" onclick="openTMDBFilm(${m.id})">`
+        : `<div class="noposter" onclick="openTMDBFilm(${m.id})">нет постера в TMDB</div>`;
+      return `
+        <div class="tmdb-card">
+          ${posterHtml}
+          <div class="tc-info">
+            <div class="tc-title serif" onclick="openTMDBFilm(${m.id})" style="cursor:pointer;">${m.title}</div>
+            <div class="tc-year">${year}</div>
+          </div>
+        </div>
+      `;
+    }).join('');
+
+    // stash raw results for addFromTMDB lookup
+    window._tmdbLastResults = data.results;
+
+  }catch(err){
+    console.error('TMDB fetch error:', err);
+    setStatus(`Не получилось связаться с TMDB: ${err.message}. Если открыл файл двойным кликом (адрес начинается с file://) — попробуй через Live Server или другой локальный сервер.`, 'err');
+  }
+}
+
+
+async function openTMDBFilm(id){
+  const m = (window._tmdbLastResults || []).find(x => x.id === id);
+  if(!m) return;
+
+  let director = "—";
+  let cast = [];
+  let genres = Array.isArray(m.genres) ? m.genres.map(g => g.name) : [];
+
+  try{
+    const detailsUrl = `${API_BASE}/tmdb/movie/${m.id}`;
+    const detailsRes = await fetch(detailsUrl);
+    if(detailsRes.ok){
+      const details = await detailsRes.json();
+      if(Array.isArray(details.genres)) genres = details.genres.map(g => g.name);
+    }
+
+    const creditsUrl = `${API_BASE}/tmdb/movie/${m.id}/credits`;
+    const res = await fetch(creditsUrl);
+    if(res.ok){
+      const credits = await res.json();
+      const directorEntry = (credits.crew || []).find(c => c.job === 'Director');
+      if(directorEntry) director = directorEntry.name;
+      cast = (credits.cast || []).slice(0, 5).map(c => ({ n:c.name, r:c.character || '—' }));
+    }
+  }catch(err){}
+
+  // Если этот фильм уже есть в профиле (в том числе после импорта
+  // из CSV) — подтягиваем твою реальную оценку и заметку, вместо
+  // того чтобы каждый раз показывать страницу "как в первый раз"
+  const existingEntry = (currentProfile?.entries || []).find(e => e.tmdb_id === m.id);
+  const ratingHistory = (currentProfile?.history || {})[m.id] || [];
+
+  const film = {
+    id: 'tmdb-' + m.id,
+    tmdbId: m.id,
+    title: m.title,
+    director,
+    year: m.release_date ? m.release_date.slice(0,4) : "—",
+    releaseYear: m.release_date ? Number(m.release_date.slice(0,4)) : null,
+    genres,
+    poster: m.poster_path ? `url(${TMDB_IMG_BASE}${m.poster_path}) center/cover` : "linear-gradient(160deg,#3a3a4a,#1a1a22)",
+    posterUrl: m.poster_path ? `${TMDB_IMG_BASE}${m.poster_path}` : "",
+    rating: m.vote_average ? Math.round(m.vote_average / 2 * 10) / 10 : 0,
+    yourRating: existingEntry?.rating || 0,
+    tags: genres.length ? genres : ["из TMDB"],
+    synopsis: m.overview || "Описание пока не добавлено.",
+    entryDate: existingEntry?.watched_date || "",
+    rewatch: false,
+    watchDates: existingEntry?.watched_date ? [existingEntry.watched_date] : [],
+    entryText: existingEntry?.review || "",
+    ratingHistory,
+    cast
+  };
+
+  window._openFilmCache = window._openFilmCache || {};
+  window._openFilmCache[film.id] = film;
+  showDetail(film.id);
+}
+
+async function addFromTMDB(id, btn){
+  const m = (window._tmdbLastResults || []).find(x => x.id === id);
+  if(!m) return;
+
+  const slug = 'tmdb-' + m.id;
+  if(films.some(f => f.id === slug)){
+    btn.textContent = '✓ уже добавлено';
+    btn.classList.add('added');
+    return;
+  }
+
+  btn.textContent = 'загружаю...';
+  btn.disabled = true;
+
+  let director = "—";
+  let cast = [];
+  let genres = [];
+
+  try{
+    const detailsUrl = `${API_BASE}/tmdb/movie/${m.id}`;
+    const detailsRes = await fetch(detailsUrl);
+    if(detailsRes.ok){
+      const details = await detailsRes.json();
+      genres = Array.isArray(details.genres) ? details.genres.map(g => g.name) : [];
+    }
+
+    const creditsUrl = `${API_BASE}/tmdb/movie/${m.id}/credits`;
+    const res = await fetch(creditsUrl);
+    if(res.ok){
+      const credits = await res.json();
+      const directorEntry = (credits.crew || []).find(c => c.job === 'Director');
+      if(directorEntry) director = directorEntry.name;
+      cast = (credits.cast || []).slice(0, 5).map(c => ({ n: c.name, r: c.character || '—' }));
+    }
+  }catch(err){
+    // если credits не загрузились — просто оставляем "—" и пустой актёрский состав
+  }
+
+  films.push({
+    id: slug,
+    tmdbId: m.id,
+    title: m.title,
+    director: director,
+    year: m.release_date ? m.release_date.slice(0,4) : "—",
+    releaseYear: m.release_date ? Number(m.release_date.slice(0,4)) : null,
+    genres,
+    poster: m.poster_path ? `url(${TMDB_IMG_BASE}${m.poster_path}) center/cover` : "linear-gradient(160deg,#3a3a4a,#1a1a22)",
+    posterUrl: m.poster_path ? `${TMDB_IMG_BASE}${m.poster_path}` : "",
+    rating: m.vote_average ? Math.round(m.vote_average / 2 * 10) / 10 : 0,
+    yourRating: 0,
+    tags: ["из TMDB"],
+    synopsis: m.overview || "Описание пока не добавлено.",
+    entryDate: "",
+    rewatch: false,
+    watchDates: [],
+    entryText: "",
+    cast: cast
+  });
+
+  btn.textContent = '✓ добавлено';
+  btn.classList.add('added');
+}
+
+// ================= Импорт оценок из IMDB (.csv) =================
+
+// Простой разбор CSV-строки с учётом кавычек — названия фильмов
+// часто содержат запятые ("Spider-Man: Brand New Day, Part 2"),
+// поэтому нельзя просто делить строку по запятой в лоб.
+function parseCsvLine(line){
+  const result = [];
+  let current = '';
+  let inQuotes = false;
+
+  for(let i = 0; i < line.length; i++){
+    const ch = line[i];
+    if(ch === '"'){
+      if(inQuotes && line[i+1] === '"'){ current += '"'; i++; }
+      else{ inQuotes = !inQuotes; }
+    }else if(ch === ',' && !inQuotes){
+      result.push(current);
+      current = '';
+    }else{
+      current += ch;
+    }
+  }
+  result.push(current);
+  return result;
+}
+
+function parseImdbCsv(text){
+  const lines = text.split(/\r?\n/).filter(l => l.trim().length > 0);
+  if(lines.length < 2) return [];
+
+  const header = parseCsvLine(lines[0]).map(h => h.trim());
+  const idx = {
+    const: header.indexOf('Const'),
+    rating: header.indexOf('Your Rating'),
+    date: header.indexOf('Date Rated'),
+    title: header.indexOf('Title'),
+    year: header.indexOf('Year')
+  };
+
+  if(idx.const === -1 || idx.rating === -1){
+    throw new Error('Не нашёл нужные колонки (Const, Your Rating) — это точно экспорт с IMDB?');
+  }
+
+  return lines.slice(1).map(line => {
+    const cols = parseCsvLine(line);
+    return {
+      imdbId: (cols[idx.const] || '').trim(),
+      rating: Number(cols[idx.rating]),
+      dateRated: (cols[idx.date] || '').trim(),
+      title: (cols[idx.title] || '').trim(),
+      year: Number(cols[idx.year]) || null
+    };
+  }).filter(row => row.imdbId && row.rating);
+}
+
+// Обрабатывает список фильмов пачками по несколько штук одновременно —
+// быстрее, чем по одному, но не заваливает TMDB сотнями запросов разом
+async function processInBatches(items, batchSize, worker){
+  const results = [];
+  for(let i = 0; i < items.length; i += batchSize){
+    const batch = items.slice(i, i + batchSize);
+    const batchResults = await Promise.all(batch.map(worker));
+    results.push(...batchResults);
+  }
+  return results;
+}
+
+async function handleImdbImport(event){
+  const file = event.target.files[0];
+  if(!file) return;
+
+  const statusEl = document.getElementById('import-status');
+
+  if(!authToken){
+    statusEl.textContent = 'Сначала войди или зарегистрируйся.';
+    statusEl.className = 'import-status err';
+    return;
+  }
+
+  statusEl.textContent = 'Читаю файл...';
+  statusEl.className = 'import-status';
+
+  let rows;
+  try{
+    const text = await file.text();
+    rows = parseImdbCsv(text);
+  }catch(err){
+    statusEl.textContent = err.message;
+    statusEl.className = 'import-status err';
+    return;
+  }
+
+  if(rows.length === 0){
+    statusEl.textContent = 'В файле не нашлось строк с оценками.';
+    statusEl.className = 'import-status err';
+    return;
+  }
+
+  // список жанров нужен один раз — превращает числовые id в названия
+  let genreMap = {};
+  try{
+    const genresRes = await fetch(`${API_BASE}/tmdb/genres`);
+    const genresData = await genresRes.json();
+    (genresData.genres || []).forEach(g => { genreMap[g.id] = g.name; });
+  }catch(err){ /* не критично — просто останемся без жанров у импортированных фильмов */ }
+
+  let matched = 0;
+  let notFound = 0;
+  const entriesToImport = [];
+
+  await processInBatches(rows, 5, async (row) => {
+    try{
+      const res = await fetch(`${API_BASE}/tmdb/find/${encodeURIComponent(row.imdbId)}`);
+      const data = await res.json();
+      const movie = (data.movie_results || [])[0];
+
+      statusEl.textContent = `Сопоставляю с TMDB: ${matched + notFound + 1} / ${rows.length}...`;
+
+      if(!movie){
+        notFound++;
+        return;
+      }
+
+      matched++;
+      entriesToImport.push({
+        tmdb_id: movie.id,
+        title: movie.title || row.title,
+        poster_path: movie.poster_path ? `${TMDB_IMG_BASE}${movie.poster_path}` : '',
+        rating: row.rating,
+        watched_date: row.dateRated || null,
+        release_year: row.year || (movie.release_date ? Number(movie.release_date.slice(0,4)) : null),
+        genres: (movie.genre_ids || []).map(id => genreMap[id]).filter(Boolean)
+      });
+    }catch(err){
+      notFound++;
+    }
+  });
+
+  if(entriesToImport.length === 0){
+    statusEl.textContent = 'Ни один фильм не удалось сопоставить с TMDB.';
+    statusEl.className = 'import-status err';
+    return;
+  }
+
+  statusEl.textContent = 'Сохраняю на сервере...';
+
+  try{
+    const res = await fetch(`${API_BASE}/import/entries`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': 'Bearer ' + authToken
+      },
+      body: JSON.stringify({ entries: entriesToImport })
+    });
+
+    if(!res.ok){
+      statusEl.textContent = 'Сервер отклонил импорт.';
+      statusEl.className = 'import-status err';
+      if(res.status === 401){ doLogout(); }
+      return;
+    }
+
+    const result = await res.json();
+    statusEl.textContent = `✓ Импортировано ${result.imported} из ${rows.length}` +
+      (notFound ? ` (${notFound} не нашлось на TMDB)` : '');
+    statusEl.className = 'import-status ok';
+
+    await loadOwnProfile();
+
+  }catch(err){
+    statusEl.textContent = 'Сервер не отвечает. Он точно запущен на localhost:3000?';
+    statusEl.className = 'import-status err';
+  }
+
+  event.target.value = '';
+}
+</script>
+
+</body>
+</html>
